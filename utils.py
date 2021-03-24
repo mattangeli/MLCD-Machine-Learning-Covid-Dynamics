@@ -1,18 +1,20 @@
 import numpy as np
 import torch
 
-
-def perturbPoints(grid,t0,tf,sig=0.5):
 #   stochastic perturbation of the evaluation points
 #   force t[0]=t0  & force points to be in the t-interval
-    delta_t = grid[1] - grid[0]  
-    noise = delta_t * torch.randn_like(grid)*sig
-    t = grid + noise
-    t.data[2] = torch.ones(1,1)*(-1)
-    t.data[t<t0]=t0 - t.data[t<t0]
-    t.data[t>tf]=2*tf - t.data[t>tf]
-    t.requires_grad = True
-    return t
+def perturbPoints(v0, vf, n_train, sig=0.5):
+    
+    grid = torch.linspace(v0, vf, n_train).reshape(-1, 1)
+    delta_v = grid[1] - grid[0]  
+    noise = delta_v * torch.randn_like(grid)*sig
+    v = grid + noise
+    v.data[2] = torch.ones(1, 1)*(-1)
+    v.data[v<v0]=v0 - v.data[v<v0]
+    v.data[v>vf]=2*vf - v.data[v>vf]
+    v.requires_grad = True
+    
+    return v
 
     
 

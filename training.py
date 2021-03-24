@@ -14,52 +14,47 @@ import matplotlib.pyplot as plt
 
 
 # Train the NN
-def run_odeNet(X0, tf, neurons, epochs, n_train,lr,
+def run_odeNet(X0, Xf,layers, hidden_units, activation, epochs, n_train,lr, betas,
                     minibatch_number, minLoss, loadWeights=False, PATH= "models/expDE"):
 
-    fc0 = odeNet(neurons)
+    fc0 = odeNet(layers, hidden_units, activation)
     fc1 =  copy.deepcopy(fc0) # fc1 is a deepcopy of the network with the lowest training loss
-    # optimizer
-    betas = [0.999, 0.9999]    
-    optimizer = optim.Adam(fc0.parameters(), lr=lr, betas=betas)
+
+    optimizer = optim.Adam(fc0.parameters(), lr, betas)
     Loss_history = [];     Llim =  1 
         
-    t0=X0[0];   
-    grid = torch.linspace(t0, tf, n_train).reshape(-1,1)
+    t0=X0[0];
+    tf=Xf[0]   
 
-        
 ## LOADING WEIGHTS PART if PATH file exists and loadWeights=True
     if path.exists(PATH) and loadWeights==True:
         checkpoint = torch.load(PATH)
         fc0.load_state_dict(checkpoint['model_state_dict'])
         optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-        tt = checkpoint['epoch']
+        epoch = checkpoint['epoch']
         Ltot = checkpoint['loss']
         fc0.train(); # or model.eval
     
     
 ## TRAINING ITERATION    
     TeP0 = time.time()
-    for tt in range(epochs):   
+    for epoch in range(epochs):   
 
 # Perturbing the evaluation points & forcing t[0]=t0
-        # t=perturbPoints(grid,t0,tf,sig=.03*tf)
-        t=perturbPoints(grid,t0,tf,sig= 0.3*tf)
+        t=perturbPoints(t0, tf, n_train, sig= 0.3*tf)
             
-#  Network solutions 
+#  Network solution and loss
         x = parametricSolutions(t,fc0,X0)
-
         Ltot = Eqs_Loss(t,x, X0)            
 
 # OPTIMIZER
-        Ltot.backward(retain_graph=False); #True
+        Ltot.backward(retain_graph=False); 
         optimizer.step();   optimizer.zero_grad()
 
-# keep the loss function history
         Loss_history.append(Ltot.detach().numpy())
 
 #Keep the best model (lowest loss) by using a deep copy
-        if  tt > 0.8*epochs  and Ltot < Llim:
+        if  epoch > 0.8*epochs  and Ltot < Llim:
             fc1 =  copy.deepcopy(fc0)
             Llim=Ltot 
 
@@ -73,7 +68,7 @@ def run_odeNet(X0, tf, neurons, epochs, n_train,lr,
     runTime = TePf - TeP0        
     
     torch.save({
-    'epoch': tt,
+    'epoch': epoch,
     'model_state_dict': fc1.state_dict(),
     'optimizer_state_dict': optimizer.state_dict(),
     'loss': Ltot,
@@ -83,9 +78,9 @@ def run_odeNet(X0, tf, neurons, epochs, n_train,lr,
 
 
 
-def loadModel(neurons, PATH):
+def loadModel(PATH):
     if path.exists(PATH):
-        fc0 = odeNet(neurons)
+        fc0 = odeNet(layers, hidden_units, activation)
         checkpoint = torch.load(PATH)
         fc0.load_state_dict(checkpoint['model_state_dict'])
         fc0.train(); # or model.eval
