@@ -10,21 +10,23 @@ from utils import perturbPoints
 from funct import *
 from os import path
 import matplotlib.pyplot as plt
-
+from numpy.random import uniform
 
 
 # Train the NN
 def run_odeNet(X0, Xf,layers, hidden_units, activation, epochs, n_train,lr, betas,
                     minibatch_number, minLoss, loadWeights=False, PATH= "models/expDE"):
 
-    fc0 = odeNet(layers, hidden_units, activation)
+    input_dim = len(Xf)
+    fc0 = odeNet(input_dim, layers, hidden_units, activation)
     fc1 =  copy.deepcopy(fc0) # fc1 is a deepcopy of the network with the lowest training loss
-
+    
     optimizer = optim.Adam(fc0.parameters(), lr, betas)
     Loss_history = [];     Llim =  1 
+    
         
-    t0=X0[0];
-    tf=Xf[0]   
+    x0, t0, lam0 = X0
+    xf, tf, lamf = Xf
 
 ## LOADING WEIGHTS PART if PATH file exists and loadWeights=True
     if path.exists(PATH) and loadWeights==True:
@@ -42,10 +44,16 @@ def run_odeNet(X0, Xf,layers, hidden_units, activation, epochs, n_train,lr, beta
 
 # Perturbing the evaluation points & forcing t[0]=t0
         t=perturbPoints(t0, tf, n_train, sig= 0.3*tf)
-            
+        x0s = uniform(x0, xf, size= n_train)
+        x0s = torch.Tensor([x0s]).reshape((-1, 1))
+        lam = uniform(lam0, lamf, size= n_train)
+        lam = torch.Tensor([lam]).reshape((-1, 1))
+        
 #  Network solution and loss
-        x = parametricSolutions(t,fc0,X0)
-        Ltot = Eqs_Loss(t,x, X0)            
+        t_bundle = torch.cat([t,x0s,lam],dim =1)
+
+        x_hat = parametricSolutions(t_bundle,fc0,X0)
+        Ltot = Eqs_Loss(t, x_hat, t_bundle)            
 
 # OPTIMIZER
         Ltot.backward(retain_graph=False); 

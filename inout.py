@@ -1,6 +1,8 @@
 import matplotlib.pyplot as plt
 import numpy as np
 import os
+from matplotlib.colors import LogNorm
+
 
 def checkfolders():
     if not os.path.exists('models'):
@@ -20,7 +22,7 @@ def printLoss(loss, runTime):
     plt.ylabel('Loss');plt.xlabel('t')
 
     plt.savefig('nl_ode_loss.png')
-
+    plt.close()
 
 def printGroundThruth(t_net, x_exact, xTest,  xdot_exact, xdotTest):
     lineW = 4 # Line thickness
@@ -39,4 +41,17 @@ def printGroundThruth(t_net, x_exact, xTest,  xdot_exact, xdotTest):
     
     plt.savefig('simpleExp.png')
     plt.tight_layout()
+    plt.close()
 
+def print_scatter(Losses):
+
+    X, Y, Z = Losses[:, 0], Losses[:, 1], Losses[:, 2]
+    area = 20.0
+    plt.scatter(X,Y,edgecolors='none',s=area,c=Z,
+                norm=LogNorm())
+    plt.colorbar()
+    plt.savefig('scatter_loss.png')
+    plt.tight_layout()
+    plt.close()
+    
+    
