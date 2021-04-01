@@ -1,102 +1,93 @@
 import numpy as np
-import torch
-import torch.optim as optim
 import time
 import copy
-import os
-import sys
-from network import odeNet
-from utils import perturbPoints
-from funct import *
+from utils import * 
 from os import path
-import matplotlib.pyplot as plt
 from numpy.random import uniform
+from torch.utils.tensorboard import SummaryWriter
+from tqdm import tqdm
+from losses import *
+from torch.utils.data import DataLoader
 
-
-# Train the NN
-def run_odeNet(X0, Xf,layers, hidden_units, activation, epochs, n_train,lr, betas,
-                    minibatch_number, minLoss, loadWeights=False, PATH= "models/expDE"):
-
-    input_dim = len(Xf)
-    fc0 = odeNet(input_dim, layers, hidden_units, activation)
-    fc1 =  copy.deepcopy(fc0) # fc1 is a deepcopy of the network with the lowest training loss
+def train_sirNet(model, optimizer, scheduler, t_0, t_final, initial_conditions_set, parameters_bundle, epochs,
+               train_size, num_batches, hack_trivial, decay, PATH, loss_threshold = float('-inf')):
     
-    optimizer = optim.Adam(fc0.parameters(), lr, betas)
-    Loss_history = [];     Llim =  1 
+    betas, gammas = parameters_bundle[0][:], parameters_bundle[1][:]
+
+   # Train mode
+    model.train()
+
+    # Initialize losses arrays
+    Loss_history, min_loss = [], 1.
     
+    time_initial = time.time()
+    ## Training 
+    for epoch in tqdm(range(epochs), desc='Training'):
+        # Generate DataLoader
+        batch_size = int(train_size / num_batches)
+        t_dataloader = generate_dataloader(t_0, t_final, train_size, batch_size, perturb=True)
+   
+        train_epoch_loss = 0.  
+
+        for i, t in enumerate(t_dataloader, 0):
+            # Sample randomly initial conditions, beta and gamma
+            i_0 = uniform(initial_conditions_set[0][0], initial_conditions_set[0][1], size=batch_size)
+            r_0 = uniform(initial_conditions_set[1][0], initial_conditions_set[1][1], size=batch_size)
+            beta = uniform(betas[0], betas[1], size=batch_size)
+            gamma = uniform(gammas[0], gammas[1], size=batch_size)
+
+            i_0 = torch.Tensor([i_0]).reshape((-1, 1))
+            r_0 = torch.Tensor([r_0]).reshape((-1, 1))
+            beta = torch.Tensor([beta]).reshape((-1, 1))
+            gamma = torch.Tensor([gamma]).reshape((-1, 1))
+
+            s_0 = 1 - (i_0 + r_0)
+            initial_conditions = [s_0, i_0, r_0]
+            param_bundle = [beta, gamma]
+
+            #  Network solutions
+            s, i, r = model.parametric_solution(t, t_0, initial_conditions, param_bundle)
+            batch_loss = sir_loss(t, s, i, r, param_bundle, decay)
+            
+            if hack_trivial:
+                batch_trivial_loss = trivial_loss(i, hack_trivial)
+                batch_loss = batch_loss + batch_trivial_loss
+
+            # Optimization
+            batch_loss.backward(retain_graph = False)
+            optimizer.step()  
+            train_epoch_loss += batch_loss.item()
+            optimizer.zero_grad()            
+               
+        # Keep the loss function history
+        Loss_history.append(train_epoch_loss)
+        scheduler.step(train_epoch_loss)
         
-    x0, t0, lam0 = X0
-    xf, tf, lamf = Xf
-
-## LOADING WEIGHTS PART if PATH file exists and loadWeights=True
-    if path.exists(PATH) and loadWeights==True:
-        checkpoint = torch.load(PATH)
-        fc0.load_state_dict(checkpoint['model_state_dict'])
-        optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-        epoch = checkpoint['epoch']
-        Ltot = checkpoint['loss']
-        fc0.train(); # or model.eval
-    
-    
-## TRAINING ITERATION    
-    TeP0 = time.time()
-    for epoch in range(epochs):   
-
-# Perturbing the evaluation points & forcing t[0]=t0
-        t=perturbPoints(t0, tf, n_train, sig= 0.3*tf)
-        x0s = uniform(x0, xf, size= n_train)
-        x0s = torch.Tensor([x0s]).reshape((-1, 1))
-        lam = uniform(lam0, lamf, size= n_train)
-        lam = torch.Tensor([lam]).reshape((-1, 1))
+        if train_epoch_loss < min_loss:
+            min_loss = train_epoch_loss
+            best_model = copy.deepcopy(model)
         
-#  Network solution and loss
-        t_bundle = torch.cat([t,x0s,lam],dim =1)
-
-        x_hat = parametricSolutions(t_bundle,fc0,X0)
-        Ltot = Eqs_Loss(t, x_hat, t_bundle)            
-
-# OPTIMIZER
-        Ltot.backward(retain_graph=False); 
-        optimizer.step();   optimizer.zero_grad()
-
-        Loss_history.append(Ltot.detach().numpy())
-
-#Keep the best model (lowest loss) by using a deep copy
-        if  epoch > 0.8*epochs  and Ltot < Llim:
-            fc1 =  copy.deepcopy(fc0)
-            Llim=Ltot 
-
-# break the training after a thresold of accuracy
-        if Ltot < minLoss :
-            fc1 =  copy.deepcopy(fc0)
-            print('Reach minimum requested loss')
+        if train_epoch_loss < loss_threshold:
+            torch.save({'model_state_dict': best_model.state_dict(),
+                        'optimizer_state_dict': optimizer.state_dict(),
+                        'loss': train_epoch_loss},
+                         PATH)
             break
 
-    TePf = time.time()
-    runTime = TePf - TeP0        
+        if epoch%250 == 0:
+           print('Loss = ' + str(train_epoch_loss), 'lr = ' + str(optimizer.param_groups[0]['lr']))   
+        
+    torch.save({'model_state_dict': best_model.state_dict(),
+                'optimizer_state_dict': optimizer.state_dict(),
+                'loss': train_epoch_loss},
+                 PATH)
+
+    time_final  = time.time()
+    run_time = time_final - time_initial      
     
-    torch.save({
-    'epoch': epoch,
-    'model_state_dict': fc1.state_dict(),
-    'optimizer_state_dict': optimizer.state_dict(),
-    'loss': Ltot,
-    }, PATH)
-    
-    return fc1, Loss_history, runTime
+    return best_model, Loss_history, run_time
 
 
-
-def loadModel(PATH):
-    if path.exists(PATH):
-        fc0 = odeNet(layers, hidden_units, activation)
-        checkpoint = torch.load(PATH)
-        fc0.load_state_dict(checkpoint['model_state_dict'])
-        fc0.train(); # or model.eval
-    else:
-        print('Warning: There is not any trained model. Terminate')
-        sys.exit()
-
-    return fc0
 
 
    
