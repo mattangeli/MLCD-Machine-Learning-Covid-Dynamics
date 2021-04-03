@@ -30,6 +30,27 @@ def sir_loss(t, s, i, r, param_bundle, decay= 0.):
     return total_loss
 
 
+def data_fitting_loss(t, true_pop, s_hat, i_hat, r_hat, mode = 'mse'):
+
+    s_true = true_pop[0]
+    i_true = true_pop[1]
+    r_true = true_pop[2]
+
+    if mode == 'mse':
+        loss_s = (s_true - s_hat).pow(2)
+        loss_i = (i_true - i_hat).pow(2)
+        loss_r = (r_true - r_hat).pow(2)
+    elif mode == 'cross_entropy':
+        loss_s = - s_true * torch.log(s_hat + 1e-10)
+        loss_i = - i_true * torch.log(i_hat + 1e-10)
+        loss_r = - r_true * torch.log(r_hat + 1e-10)
+    else:
+        raise ValueError('Invalid loss mode specification!')
+ 
+    return loss_s, loss_i, loss_r
+
+
+
 def trivial_loss(infected, hack_trivial):
     trivial_loss = 0.
 

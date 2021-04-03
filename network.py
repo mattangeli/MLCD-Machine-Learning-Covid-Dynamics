@@ -36,14 +36,14 @@ class sirNet(torch.nn.Module):
         r_N = (x[:, 2]).reshape(-1, 1)
         return s_N, i_N, r_N
 
-    def parametric_solution(self, t, t_0, initial_conditions, param_bundle):
+    def parametric_solution(self, t_tensor, t_0, initial_conditions, param_bundle):
         s_0, i_0, r_0 = initial_conditions[0][:], initial_conditions[1][:], initial_conditions[2][:] 
         beta, gamma = param_bundle[0][:], param_bundle[1][:], 
 
-        dt = t - t_0
+        dt = t_tensor - t_0
         f = (1 - torch.exp(-dt))
         
-        t_bundle = torch.cat([t, i_0, r_0, beta, gamma], dim=1)
+        t_bundle = torch.cat([t_tensor, i_0, r_0, beta, gamma], dim=1)
 
         N = self.forward(t_bundle)
 

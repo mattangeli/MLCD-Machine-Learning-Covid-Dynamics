@@ -34,8 +34,9 @@ def f(u, t, beta, gamma):
     return derivs
 
 
-# Scipy Solver
+
 def SIR_solution(t, s_0, i_0, r_0, beta, gamma):
+    # Scipy Solver
     u_0 = [s_0, i_0, r_0]
 
     # Call the ODE solver
@@ -46,6 +47,76 @@ def SIR_solution(t, s_0, i_0, r_0, beta, gamma):
 
     return s, i, r
 
+
+def generate_synthetic_data(model, t_0, t_final, size, i_0=0.3, r_0=0.1, beta=0.25, gamma=0.1):  
+   # generate synthetic data of lenght size       
+   time_sequence = np.linspace(t_0, t_final, size)
+   s_0 = 1 - (i_0 + r_0)
+   
+   s_0 = torch.Tensor([s_0]).reshape(-1,1)
+   i_0 = torch.Tensor([i_0]).reshape(-1,1)
+   r_0 = torch.Tensor([r_0]).reshape(-1,1)   
+   beta = torch.Tensor([beta]).reshape(-1,1)
+   gamma = torch.Tensor([gamma]).reshape(-1,1)
+         
+   initial_conditions = [s_0, i_0, r_0]
+   params_bundle = [beta, gamma]
+
+   synthetic_data = {}
+
+   for t in time_sequence:
+       t = torch.Tensor([t]).reshape(-1,1)
+       s, i, r = model.parametric_solution(t, t_0, initial_conditions, params_bundle)
+       synthetic_data[t.item()] = [s.item(), i.item(), r.item()]
+
+   return synthetic_data
+   
+     
+def test_fitmodel(model, time_series_dict, optimized_params, lineW = 3):
+   # test the model with a given set of parameters and intial conditions 
+   time_sequence = list(time_series_dict.keys())   
+   t = torch.Tensor(time_sequence).reshape(-1,1)
+   t_0 = time_sequence[0]
+   n_test = len(t)
+   s0, i0, r0, beta0, gamma0 = optimized_params
+   
+   s0 = 1 - i0 - r0
+   i_0 = i0*torch.ones(n_test)
+   r_0 = r0*torch.ones(n_test)
+   beta = beta0*torch.ones(n_test)
+   gamma = gamma0*torch.ones(n_test)
+   i_0 = torch.Tensor(i_0).reshape((-1, 1))
+   r_0 = torch.Tensor(r_0).reshape((-1, 1))
+   beta = torch.Tensor(beta).reshape((-1, 1))
+   gamma = torch.Tensor(gamma).reshape((-1, 1))
+   s_0 = 1 - (i_0 + r_0)
+   
+   initial_conditions = [s_0, i_0, r_0]
+   params_bundle = [beta, gamma]
+
+   s, i, r = model.parametric_solution(t, t_0, initial_conditions, params_bundle)
+   
+   t = t.detach().numpy()
+   s = s.detach().numpy()
+   i = i.detach().numpy()
+   r = r.detach().numpy() 
+      
+   true_values = list(time_series_dict.values())
+   s_true, i_true, r_true = map(list, zip(*true_values))
+                                                     
+   plt.plot(t, s_true,'--b', label=' S Data', linewidth=lineW);
+   plt.plot(t, s ,'-b', label='S fit',linewidth=lineW, alpha=.5);
+   plt.plot(t, r_true,'--g', label=' R Data', linewidth=lineW);
+   plt.plot(t, r ,'-g', label='R fit',linewidth=lineW, alpha=.5);
+   plt.plot(t, i_true,'--r', label=' I Data', linewidth=lineW);
+   plt.plot(t, i ,'-r', label='I fit',linewidth=lineW, alpha=.5);
+   plt.title('i0={:.2f}, r0={:.2f}, beta={:.2f}, gamma={:.2f}'.format(round(i0,2), round(r0,2), round(beta0,2), round(gamma0,2)))     
+   plt.legend()
+   
+   plt.savefig('fit_vs_data.png')
+   plt.tight_layout()
+   plt.close()
+  
     
 def test_model(model, t_0, t_final, i0, r0, beta0=0.25, gamma0=0.1, n_test = 1000):  
    # test the model with a given set of parameters and intial conditions      
@@ -85,7 +156,7 @@ def test_model(model, t_0, t_final, i0, r0, beta0=0.25, gamma0=0.1, n_test = 100
    plt.plot(t, i ,'-r', label='I Network',linewidth=lineW, alpha=.5);
    plt.legend()
    
-   plt.savefig('solutions_i0={},r0={},beta0={},gamma0={}.png'.format(i0, r0, beta0, gamma0))
+   plt.savefig('Unsupervised_vs_GroundTruth_i0={},r0={},beta0={},gamma0={}.png'.format(i0, r0, beta0, gamma0))
    plt.tight_layout()
    plt.close()
 

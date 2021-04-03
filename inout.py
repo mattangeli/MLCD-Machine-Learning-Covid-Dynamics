@@ -5,11 +5,11 @@ from matplotlib.colors import LogNorm
 import pandas as pd
 import wget
 
-ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
 
-def checkfolders():
-    PATH_unsup = ROOT_DIR + '/trained_models/Unsupervised/'
-    PATH_sup = ROOT_DIR + '/trained_models/Supervised/'
+ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
+def checkfolders(ROOT_DIR = ROOT_DIR):
+    PATH_unsup = ROOT_DIR + '/trained_models/unsupervised/'
+    PATH_sup = ROOT_DIR + '/trained_models/supervised/'
     
     if not os.path.exists(PATH_unsup):
        os.makedirs(PATH_unsup)
@@ -17,10 +17,10 @@ def checkfolders():
     if not os.path.exists(PATH_sup):
        os.makedirs(PATH_sup)
        
-    return PATH_unsup, PATH_sup   
+    return ROOT_DIR, PATH_unsup, PATH_sup   
 
 
-def get_dataframe(country, begin_date, average): 
+def get_dataframe(country, begin_date, average, ROOT_DIR = ROOT_DIR): 
 
     try:
         countries_to_fit = pd.read_csv(ROOT_DIR + '/real_data/countries.csv')
@@ -96,8 +96,8 @@ def get_dataframe(country, begin_date, average):
 
     return infected, removed
     
-def printLoss(loss, runTime, PATH):
-    np.savetxt(PATH, loss)
+def printLoss(loss, runTime, model_name, ROOT_DIR = ROOT_DIR):
+    np.savetxt(ROOT_DIR + '/trained_models/Unsupervised/{}'.format(model_name), loss)
     #print('Training time (minutes):', runTime/60)
     print('Final training loss: ',  loss[-1] )
     plt.figure()
@@ -126,6 +126,7 @@ def printSIRsolution(t_net, sTest, iTest, rTest, sExact, iExact, rExact, beta, g
     plt.legend()
     #plt.tight_layout()
     plt.close()
+       
     
     
 def printGroundThruth(t_net, x_exact, xTest,  xdot_exact, xdotTest):
