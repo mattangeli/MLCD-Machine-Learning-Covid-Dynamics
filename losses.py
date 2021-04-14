@@ -13,8 +13,6 @@ def sir_loss(t, s, a, i, v, r, param_bundle, param_fixed, decay= 0.):
     v_prime = dfx(t, v)
     r_prime = dfx(t, r)
 
-    N = 1
-
     u = [s, a, i, v, r]
     ds, da, di, dv, dr = SAIVR_derivs(u, t, alpha_1, beta_1, gamma, param_fixed)
 
@@ -25,17 +23,17 @@ def sir_loss(t, s, a, i, v, r, param_bundle, param_fixed, decay= 0.):
     loss_r = r_prime - dr
    
     # Regularize to give more importance to initial points
-    loss_s = loss_s * torch.exp(-decay * t)
-    loss_a = loss_a * torch.exp(-decay * t)
-    loss_i = loss_i * torch.exp(-decay * t)
-    loss_v = loss_v * torch.exp(-decay * t)
-    loss_r = loss_r * torch.exp(-decay * t)
+    loss_s = loss_s * torch.exp(-decay * t) 
+    loss_a = loss_a * torch.exp(-decay * t) 
+    loss_i = loss_i * torch.exp(-decay * t) 
+    loss_v = loss_v * torch.exp(-decay * t) 
+    loss_r = loss_r * torch.exp(-decay * t) 
     
-    loss_s = (loss_s.pow(2)).mean()
-    loss_a = (loss_a.pow(2)).mean()
-    loss_i = (loss_i.pow(2)).mean()
-    loss_v = (loss_v.pow(2)).mean()
-    loss_r = (loss_r.pow(2)).mean()
+    loss_s = (loss_s.pow(2)).mean() 
+    loss_a = (loss_a.pow(2)).mean() 
+    loss_i = (loss_i.pow(2)).mean() 
+    loss_v = (loss_v.pow(2)).mean() 
+    loss_r = (loss_r.pow(2)).mean() 
 
     total_loss = loss_s + loss_a + loss_i + loss_v + loss_r
 
@@ -77,17 +75,15 @@ def data_fitting_loss(t, true_pop, s_hat, a_hat, i_hat, v_hat, r_hat, mode = 'ms
        i_true = true_pop[1]
 
        if mode == 'mse':
-           losses = (i_true - i_hat).pow(2)
-
+           losses = (i_true - i_hat).pow(2)             
+           
        elif mode == 'cross_entropy':
            losses = - i_true * torch.log(i_hat + 1e-10)
-
+           
        else:
            raise ValueError('Invalid loss mode specification!')
 
-
     return losses
-
 
 
 def trivial_loss(infected, asymptomatic, hack_trivial):
@@ -98,13 +94,12 @@ def trivial_loss(infected, asymptomatic, hack_trivial):
     
     for i in asymptomatic:
         trivial_loss += i
-
-    trivial_loss = hack_trivial * torch.exp(- (trivial_loss) ** 2)
+    
+    trivial_loss = hack_trivial * torch.exp(- (trivial_loss/3.) ** 2)
     return trivial_loss
 
 def dfx(x, f):
-    # Calculate the derivative with auto-differentiation
-    
+    # Calculate the derivative with auto-differentiation    
     return grad([f], [x], torch.ones(x.shape, dtype=torch.float), create_graph=True)[0]
 
 

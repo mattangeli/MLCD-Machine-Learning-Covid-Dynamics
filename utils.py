@@ -26,7 +26,7 @@ def SAIVR_derivs(u, t, alpha_1, beta_1, gamma, parameters_fixed):
 
     return derivs
 
-
+# solve the SAIVR model with integrators
 def SAIVR_solution(t, s_0, a_0, i_0, v_0, r_0, alpha_1, beta_1, gamma, parameters_fixed):
     # Scipy Solver
     u_0 = [s_0, a_0, i_0, v_0, r_0]
@@ -40,9 +40,6 @@ def SAIVR_solution(t, s_0, a_0, i_0, v_0, r_0, alpha_1, beta_1, gamma, parameter
     r = sol_sir[:, 4]
 
     return s, a, i, v, r
-
-
-
 
 
 def perturbPoints(grid, v0, vf, sig=0.5):
@@ -87,9 +84,8 @@ def SIR_solution(t, s_0, i_0, r_0, beta, gamma):
 
     return s, i, r
 
-
+# generate synthetic data of lenght size       
 def generate_synthetic_data(model, t_0, t_final, initial_conditions_set, parameters_bundle, size):  
-   # generate synthetic data of lenght size       
    time_sequence = np.linspace(t_0, t_final, size)
    
    alpha_1s, beta_1s, gammas = parameters_bundle[0][:], parameters_bundle[1][:], parameters_bundle[2][:]   
@@ -127,9 +123,8 @@ def generate_synthetic_data(model, t_0, t_final, initial_conditions_set, paramet
    return synthetic_data
 
 
-     
+# test the model with a given set of parameters and intial conditions      
 def test_fitmodel(model, data_type, time_series_dict, optimized_params, average = 'D', lineW = 3):
-   # test the model with a given set of parameters and intial conditions 
    time_sequence = list(time_series_dict.keys())   
    t = torch.Tensor(time_sequence).reshape(-1,1)
    t_0 = time_sequence[0]
@@ -180,12 +175,11 @@ def test_fitmodel(model, data_type, time_series_dict, optimized_params, average 
       
    else:
       _, i_true, v_true, _ = map(list, zip(*true_values))
-                                                        
-      #plt.plot(t, s ,'-g', label='S fit',linewidth=lineW, alpha=.5);
-      plt.plot(t, a ,'-y', label='A fit',linewidth=lineW, alpha=.5);
+
       plt.plot(t, i_true,'--r', label=' I Data', linewidth=lineW);
       plt.plot(t, i ,'-r', label='I fit',linewidth=lineW, alpha=.5);
-      #plt.plot(t, r ,'-b', label='R fit',linewidth=lineW, alpha=.5);
+      plt.plot(t, v_true,'--b', label=' V Data', linewidth=lineW);
+      plt.plot(t, v ,'-b', label='V fit',linewidth=lineW, alpha=.5);
    
    if average == 'D':
       plt.xlabel('Days') 
@@ -193,16 +187,80 @@ def test_fitmodel(model, data_type, time_series_dict, optimized_params, average 
       plt.xlabel('Weeks') 
        
    plt.ylabel('Population percentage')  
-   plt.title(' $a_0$= {:.2f}, $i_0$={:.2f}, $r_0$={:.2f}, alpha_1={:.2f}, beta_1={:.2f}, $\gamma$={:.2f}'.format(round(a0,2), round(i0,2), round(r0,2), round(alpha1,2), round(beta1,2), round(gamma0,2)))     
+   plt.title(' $a_0$= {:.2f}, $i_0$={:.2f}, $r_0$={:.2f}, alpha_1={:.2f}, beta_1={:.2f}, $\gamma$={:.2f}'.format(round(a0,2),
+              round(i0,2), round(r0,2), round(alpha1,2), round(beta1,2), round(gamma0,2)))     
    plt.legend()
    
    plt.savefig('plots/{}_fit_vs_data.png'.format(data_type))
    plt.tight_layout()
    plt.close()
+
+# test the fitted model with a given set of parameters and intial conditions 
+def test_fitmodel_groudtruth(model, data_type, time_series_dict, optimized_params, params_fixed, average = 'D', lineW = 3):
+
+   time_sequence = list(time_series_dict.keys())   
+   t = torch.Tensor(time_sequence).reshape(-1,1)
+   t_0 = time_sequence[0]
+   n_test = len(t)
+   s0, a0, i0, v0, r0, alpha1, beta1, gamma0 = optimized_params
+   
+   a_0 = a0*torch.ones(n_test)
+   i_0 = i0*torch.ones(n_test)
+   v_0 = v0*torch.ones(n_test)
+   r_0 = r0*torch.ones(n_test)
+   alpha_1 = alpha1*torch.ones(n_test)
+   beta_1 = beta1*torch.ones(n_test)
+   gamma = gamma0*torch.ones(n_test)
+   a_0 = torch.Tensor(a_0).reshape((-1, 1))
+   i_0 = torch.Tensor(i_0).reshape((-1, 1))
+   v_0 = torch.Tensor(v_0).reshape((-1, 1))
+   r_0 = torch.Tensor(r_0).reshape((-1, 1))
+   alpha_1 = torch.Tensor(alpha_1).reshape((-1, 1))
+   beta_1 = torch.Tensor(beta_1).reshape((-1, 1))
+   gamma = torch.Tensor(gamma).reshape((-1, 1))
+   s_0 = 1 - a_0 - i_0 - v_0 - r_0
+   
+   initial_conditions = [s_0, a_0, i_0, v_0, r_0]
+   params_bundle = [alpha_1, beta_1, gamma]
+   
+   s, a, i, v, r = model.parametric_solution(t, t_0, initial_conditions, params_bundle)
+   
+   t = t.detach().numpy()
+   s = s.detach().numpy()
+   a = a.detach().numpy()
+   i = i.detach().numpy() 
+   v = v.detach().numpy()
+   r = r.detach().numpy() 
+   t = t.reshape((n_test,))   
+   
+   true_values = list(time_series_dict.values())
+   
+   s_exact, a_exact, i_exact, v_exact, r_exact = SAIVR_solution(t, s0, a0, i0, v0, r0, alpha1, beta1, gamma0, params_fixed)
+   
+   _, i_true, v_true, _ = map(list, zip(*true_values))
+                                                        
+   plt.plot(t, i_exact,':r', label=' I exact', linewidth=lineW);
+   plt.plot(t, i_true,'--r', label=' I Data', linewidth=lineW);
+   plt.plot(t, i ,'-r', label='I fit',linewidth=lineW, alpha=.5);
+   
+   plt.xlabel('Days') 
+   plt.ylabel('Population percentage') 
+    
+   plt.title(' $a_0$= {:.2f}, $i_0$={:.2f}, $r_0$={:.2f}, alpha_1={:.2f}, beta_1={:.2f}, $\gamma$={:.2f}'.format(round(a0,2), 
+              round(i0,2), round(r0,2), round(alpha1,2), round(beta1,2), round(gamma0,2)))     
+   plt.legend()
+   
+   plt.savefig('plots/{}_fit_vs_data_vs_groudtruth.png'.format(data_type))
+   plt.tight_layout()
+   plt.close()
+
+
   
-  
-def test_snippet(model, epoch, loss, t_0, t_final, a0, i0, v0, r0, alpha_1=0.25, beta_1=0.25, gamma=0.1, alpha_2 = 0., beta_2 = 0., delta = 0., lam = 0., eps = 0., zeta = 0., eta =0.,  n_test = 1000):
-# test the solution using one set of random parameters in the bundle 
+# test the solution using one set of random parameters in the bundle   
+def test_snippet(model, epoch, loss, t_0, t_final, a0, i0, v0, r0, alpha_1=0.25, beta_1=0.25,
+                gamma=0.1, alpha_2 = 0., beta_2 = 0., delta = 0., lam = 0., eps = 0., zeta = 0., 
+                eta =0.,  n_test = 1000, lineW = 3):
+
    t_test = torch.linspace(t_0, t_final, n_test).reshape(-1,1)
    t_test.requires_grad = True
    
@@ -229,7 +287,9 @@ def test_snippet(model, epoch, loss, t_0, t_final, a0, i0, v0, r0, alpha_1=0.25,
    r = r.detach().numpy()
    t_test = t_test.reshape((n_test,))   
    
-   lineW = 3
+   plt.xlabel('Days') 
+   plt.ylabel('Population percentage')   
+     
    plt.plot(t_test, s ,'-g', label='S Network',linewidth=lineW, alpha=.5);
    plt.plot(t_test, a ,'-y', label='A Network',linewidth=lineW, alpha=.5);
    plt.plot(t_test, i ,'-r', label='I Network',linewidth=lineW, alpha=.5);
@@ -240,13 +300,87 @@ def test_snippet(model, epoch, loss, t_0, t_final, a0, i0, v0, r0, alpha_1=0.25,
    plt.savefig('plots/Checkpoint/Training_Checkpoint_Epoch={:.2f}_Loss={:.2f}.png'.format(epoch, loss))
    plt.close()
 
+
+def test_fitmodel_checkpoint(model, epoch, time_series_dict, optimized_params, params_fixed, average = 'D', lineW = 3):
+   # test the model with a given set of parameters and intial conditions 
+   time_sequence = list(time_series_dict.keys())   
+   t = torch.Tensor(time_sequence).reshape(-1,1)
+   t_0 = time_sequence[0]
+   n_test = len(t)
+   s0, a0, i0, v0, r0, alpha1, beta1, gamma0 = optimized_params
+   
+   a_0 = a0*torch.ones(n_test)
+   i_0 = i0*torch.ones(n_test)
+   v_0 = v0*torch.ones(n_test)
+   r_0 = r0*torch.ones(n_test)
+   alpha_1 = alpha1*torch.ones(n_test)
+   beta_1 = beta1*torch.ones(n_test)
+   gamma = gamma0*torch.ones(n_test)
+   a_0 = torch.Tensor(a_0).reshape((-1, 1))
+   i_0 = torch.Tensor(i_0).reshape((-1, 1))
+   v_0 = torch.Tensor(v_0).reshape((-1, 1))
+   r_0 = torch.Tensor(r_0).reshape((-1, 1))
+   alpha_1 = torch.Tensor(alpha_1).reshape((-1, 1))
+   beta_1 = torch.Tensor(beta_1).reshape((-1, 1))
+   gamma = torch.Tensor(gamma).reshape((-1, 1))
+   s_0 = 1 - a_0 - i_0 - v_0 - r_0
+   
+   initial_conditions = [s_0, a_0, i_0, v_0, r_0]
+   params_bundle = [alpha_1, beta_1, gamma]
+   
+   s, a, i, v, r = model.parametric_solution(t, t_0, initial_conditions, params_bundle)
+   
+   t = t.detach().numpy()
+   s = s.detach().numpy()
+   a = a.detach().numpy()
+   i = i.detach().numpy() 
+   v = v.detach().numpy()
+   r = r.detach().numpy() 
+   t = t.reshape((n_test,))   
+   
+   true_values = list(time_series_dict.values())
+   
+   s_exact, a_exact, i_exact, v_exact, r_exact = SAIVR_solution(t, s0, a0, i0, v0, r0, alpha1, beta1, gamma0, params_fixed)
+   
+   _, i_true, v_true, _ = map(list, zip(*true_values))
+                                                        
+   plt.plot(t, i_exact,':r', label=' I exact', linewidth=lineW);
+   plt.plot(t, i_true,'--r', label=' I Data', linewidth=lineW);
+   plt.plot(t, i ,'-r', label='I fit',linewidth=lineW, alpha=.5);
+   
+   plt.xlabel('Days') 
+   plt.ylabel('Population percentage')     
+   plt.title(' $a_0$= {:.2f}, $i_0$={:.2f}, $r_0$={:.2f}, alpha_1={:.2f}, beta_1={:.2f}, $\gamma$={:.2f}'.format(round(a0,2), round(i0,2), round(r0,2), round(alpha1,2), round(beta1,2), round(gamma0,2)))     
+   plt.legend()
+   
+   plt.savefig('plots/Checkpoint/{}_fit_vs_data_vs_groudtruth.png'.format(epoch))
+   plt.tight_layout()
+   plt.close()
+   
     
-    
-def test_model(model, params_fixed, t_0, t_final, a0, i0, v0, r0, alpha_1, beta_1, gamma, lineW = 3, n_test = 1000):  
+def test_model(model, initial_conditions_set, parameters_bundle, params_fixed, t_0, t_final, lineW = 3, n_test = 1000):  
    # test the model with a given set of parameters and intial conditions      
    t = torch.linspace(t_0, t_final, n_test).reshape(-1,1)
    t.requires_grad = True
    
+   alpha_1s, beta_1s, gammas = parameters_bundle[0][:], parameters_bundle[1][:], parameters_bundle[2][:]
+   
+   a0 = uniform(initial_conditions_set[0][0], initial_conditions_set[0][1], size=1)
+   i0 = uniform(initial_conditions_set[1][0], initial_conditions_set[1][1], size=1)
+   v0 = uniform(initial_conditions_set[2][0], initial_conditions_set[2][1], size=1)
+   r0 = uniform(initial_conditions_set[3][0], initial_conditions_set[3][1], size=1)
+   alpha_1 = uniform(alpha_1s[0], alpha_1s[1], size=1)
+   beta_1 = uniform(beta_1s[0], beta_1s[1], size=1)
+   gamma = uniform(gammas[0], gammas[1], size=1)
+    
+   a0 = torch.Tensor([a0])
+   i0 = torch.Tensor([i0])
+   v0 = torch.Tensor([v0])
+   r0 = torch.Tensor([r0])
+   alpha_1 = torch.Tensor([alpha_1])
+   beta_1 = torch.Tensor([beta_1])
+   gamma = torch.Tensor([gamma])
+        
    s0 = 1 - a0 - i0 - v0 -r0
    a_0 = a0*torch.ones(n_test).reshape(-1,1)
    i_0 = i0*torch.ones(n_test).reshape(-1,1)
@@ -286,7 +420,7 @@ def test_model(model, params_fixed, t_0, t_final, a0, i0, v0, r0, alpha_1, beta_
    plt.xlabel('Days') 
    plt.ylabel('Population percentage')  
    
-   plt.savefig('plots/Unsupervised_vs_GroundTruth_$i_0$={:.2f}, $a_0$={:.2f}, alpha_1={:.2f}, beta_1={:.2f}, $\gamma$={:.2f}.png'.format(i0, a0, alpha_1, beta_1, gamma))
+   plt.savefig('plots/Unsupervised_vs_GroundTruth_$i_0$={:.2f}, $a_0$={:.2f}, alpha_1={:.2f}, beta_1={:.2f}, $\gamma$={:.2f}.png'.format(i0.item(), a0.item(), alpha_1.item(), beta_1.item(), gamma.item()))
    plt.tight_layout()
    plt.close()
 
@@ -298,7 +432,7 @@ def test_model(model, params_fixed, t_0, t_final, a0, i0, v0, r0, alpha_1, beta_
    plt.xlabel('Days') 
    plt.ylabel('Population percentage')  
    
-   plt.savefig('plots/AI_Unsupervised_vs_GroundTruth_$i_0$={:.2f}, $a_0$={:.2f}, alpha_1={:.2f}, beta_1={:.2f}, $\gamma$={:.2f}.png'.format(i0, a0, alpha_1, beta_1, gamma))
+   plt.savefig('plots/AI_Unsupervised_vs_GroundTruth_$i_0$={:.2f}, $a_0$={:.2f}, alpha_1={:.2f}, beta_1={:.2f}, $\gamma$={:.2f}.png'.format(i0.item(), a0.item(), alpha_1.item(), beta_1.item(), gamma.item()))
    plt.tight_layout()
    plt.close()
 
@@ -346,5 +480,7 @@ def test_ground_truth(model, params_fixed, t_0, t_final, a0, i0, v0, r0, alpha_1
    plt.close()
 
      
-    
+
+
+ 
 

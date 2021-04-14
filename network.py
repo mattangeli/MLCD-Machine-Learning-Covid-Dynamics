@@ -2,20 +2,16 @@ import torch
 from torch.nn.functional import softmax
 from torch.utils.data import DataLoader
 
-# Define the sin() activation function
-class mySin(torch.nn.Module):
-    @staticmethod
-    def forward(input):
-        return torch.sin(input)
-
 
 class saivrNet(torch.nn.Module):
     def __init__(self, input_dim=5, layers=10, hidden=3, output=3, activation=None):
        
         super(saivrNet, self).__init__()
-        #activation
+        #activation function
         if activation is None:
             self.actF = torch.nn.Sigmoid()
+        elif activation == 'sin':
+            self.actF = mySin()
         else:
             self.actF = getattr(torch.nn, activation)()
 
@@ -44,14 +40,15 @@ class saivrNet(torch.nn.Module):
         alpha_1, beta_1, gamma = param_bundle[0][:], param_bundle[1][:], param_bundle[2][:]
 
         dt = t_tensor - t_0
-        f = (1 - torch.exp(-dt))
+        f = (1 - torch.exp(-dt)) 
         
         t_bundle = torch.cat([t_tensor, a_0, i_0, v_0, r_0, alpha_1, beta_1, gamma], dim=1)
         
         N = self.forward(t_bundle)
         
         N0, N1, N2, N3, N4 = N
-
+        
+        # concatenate to go into a softmax layer
         to_softmax = torch.cat([N0, N1, N2, N3, N4], dim=1)
         softmax_output = softmax(to_softmax, dim=1)
         N0, N1, N2, N3, N4 = softmax_output[:, 0], softmax_output[:, 1], softmax_output[:, 2], softmax_output[:, 3], softmax_output[:, 4]
@@ -65,4 +62,10 @@ class saivrNet(torch.nn.Module):
 
         return s_hat, a_hat, i_hat, v_hat, r_hat
 
+
+# Define the sin() activation function
+class mySin(torch.nn.Module):
+    @staticmethod
+    def forward(input):
+        return torch.sin(input)
 

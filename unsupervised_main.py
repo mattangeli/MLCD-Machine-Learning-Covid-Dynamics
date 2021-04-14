@@ -11,26 +11,28 @@ import shutil
 
 if __name__ == '__main__':
 
-   ROOT_DIR = checkfolders()
+   ROOT_DIR = checkfolders()   # create the folders needed to run the calculation
    
-   # Time interval
+   # Time interval (days)
    t_0 = 0.
-   t_final = 21.
+   t_final = 31.
    
    # Neural network and optimizer parameters
-   layers, hidden_units, activation = 5, 50, 'Sigmoid'
-   train_size, epochs, n_test = 1000, 5000, 1000
-   num_batches, loss_threshold, decay  = 10, 1.e-8, 1e-3
+   layers, hidden_units, activation = 5, 48, 'Sigmoid'  
+   train_size, epochs = 1024, 7500
+   num_batches, loss_threshold,  = 8, 1.e-6
+   hack_trivial = 1   #prevent the network from solving the model trivially
+   decay = 1e-4  # exponential regularization that favors the first points
    input_dim, output_dim = 8, 5
-   adam_betas, lr = [0.9, 0.999], 5e-3    
-   load_weights, hack_trivial = True, 1
-
+   adam_betas, lr = [0.9, 0.999], 5e-3   
+   load_weights = True
 
    # Initialize the model and optimizer
    model = saivrNet(input_dim, layers, hidden_units, output_dim, activation)
-   optimizer = torch.optim.Adam(model.parameters(), lr = lr)
-   scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, factor=0.3, patience=250, cooldown = 350, min_lr = 1e-6,  verbose=True)
-   model_name = 'Unsupervised_a_0={}_i_0={}_v_0={}_r_0={}_beta_1s={}_gammas={}_alpha_1s={}.pt'.format(a_0_set, i_0_set, v_0_set, r_0_set, beta_1s, gammas, alpha_1s)
+   optimizer = torch.optim.Adam(model.parameters(), lr = lr, betas = adam_betas)
+   scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, factor=0.3, patience=550, 
+                                                         cooldown = 550, min_lr = 1e-6, 
+                                                          verbose=True)
    PATH = ROOT_DIR + '/trained_models/{}'.format(model_name)
 
    try:
@@ -38,7 +40,6 @@ if __name__ == '__main__':
        if load_weights:
           checkpoint = torch.load(PATH)
           model.load_state_dict(checkpoint['model_state_dict'])
-          optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
           model.train();
           print('The model is trained starting with the weights found in ' + PATH)
        else:  
@@ -51,7 +52,7 @@ if __name__ == '__main__':
                                  
    # Print the loss history and test the NN predictions
    printLoss(loss_history, run_time, model_name)   
-   test_model(model, parameters_fixed, t_0 = t_0, t_final=t_final, a0=0.003, i0=0.003, v0=0., r0=0.05, alpha_1=0.24, beta_1=0.25, gamma=0.1)
+   test_model(model,initial_conditions_set, parameters_bundle, parameters_fixed, t_0 = t_0, t_final=t_final)
    
    
    

@@ -11,7 +11,8 @@ ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
 def checkfolders(ROOT_DIR = ROOT_DIR):
     PATH_plots = ROOT_DIR + '/plots/'
     PATH_trained = ROOT_DIR + '/trained_models/'
-    PATH_checkpoint = ROOT_DIR + '/plots/Checkpoint'   
+    PATH_checkpoint = ROOT_DIR + '/plots/Checkpoint'  
+    PATH_real = ROOT_DIR +  '/real_data/' 
              
     if not os.path.exists(PATH_plots):
        os.makedirs(PATH_plots)
@@ -25,7 +26,9 @@ def checkfolders(ROOT_DIR = ROOT_DIR):
     if not os.path.exists(PATH_trained):
        os.makedirs(PATH_trained)
   
-
+    if not os.path.exists(PATH_real):
+       os.makedirs(PATH_real)
+  
     return ROOT_DIR 
 
 country_populations = {'Italy': 60460000,
@@ -39,12 +42,16 @@ country_populations = {'Italy': 60460000,
                                   'US': 328200000,
                                   'Sweden': 10230000,
                                   'New Zealand': 4886000,
-                                  'Israel' : 9053000}
+                                  'Israel' : 9053000,
+                                  'Chile' : 18950000,
+                                  'Hungary': 9773000,
+                                  'United Arab Emirates' : 9771000,
+                                  'Uruguay': 3462000}
 
-def get_dataframe(country, begin_date, end_date, average, ROOT_DIR = ROOT_DIR): 
-
+def get_dataframe(country, begin_date, end_date, average, lam = 0.95, ROOT_DIR = ROOT_DIR): 
+    
     try:
-        countries_to_fit = pd.read_csv(ROOT_DIR + '/real_data/countries.csv')
+        countries_to_fit = pd.read_csv(ROOT_DIR + '/real_data/CSSE_data_countries.csv')
     except:
     # url of the raw csv datasets
         urls = [
@@ -54,7 +61,7 @@ def get_dataframe(country, begin_date, end_date, average, ROOT_DIR = ROOT_DIR):
                 'https://raw.githubusercontent.com/owid/covid-19-data/master/public/data/owid-covid-data.csv'
             ]
     
-        [wget.download(url, out= ROOT_DIR + 'real_data') for url in urls]
+        [wget.download(url, out= ROOT_DIR + '/real_data/') for url in urls]
            
     confirmed = pd.read_csv('real_data/time_series_covid19_confirmed_global.csv')
     deaths = pd.read_csv('real_data/time_series_covid19_deaths_global.csv')
@@ -110,6 +117,7 @@ def get_dataframe(country, begin_date, end_date, average, ROOT_DIR = ROOT_DIR):
             'Confirmed', 'Deaths', 'Recovered', 'Active']].sum().reset_index()
     
     full_grouped['Date']= pd.to_datetime(full_grouped['Date'], format = '%m/%d/%y')
+    full_grouped.to_csv(ROOT_DIR + '/real_data/CSSE_data_countries.csv')
     owid_df['Date'] = pd.to_datetime(owid_df['Date'])
    
     owid_country_df = owid_df[(owid_df['Country/Region'] == country) & (owid_df['Date'] >= begin_date)
@@ -134,8 +142,8 @@ def get_dataframe(country, begin_date, end_date, average, ROOT_DIR = ROOT_DIR):
     vaccinated_removed_avg = vaccinated_removed.resample(average, on='Date').mean()
 
     infected = np.array(country_df_avg['Active'])
-    vaccinated = np.array(vaccinated_avg['vaccinated'])
-    vaccinated_full = np.array(vaccinated_removed_avg['people_fully_vaccinated'])
+    vaccinated = np.array(vaccinated_avg['vaccinated']) * lam # rescaled by the average vaccine efficiency
+    vaccinated_full = np.array(vaccinated_removed_avg['people_fully_vaccinated']) * lam 
     removed = np.array(country_df_avg['Deaths']) + np.array(country_df_avg['Recovered']) + vaccinated_full                                                        
     
     Npop = country_populations[country]
@@ -172,7 +180,7 @@ def get_dataframe(country, begin_date, end_date, average, ROOT_DIR = ROOT_DIR):
     return time_series_dict
     
 def printLoss(loss, runTime, model_name, ROOT_DIR = ROOT_DIR):
-    np.savetxt(ROOT_DIR + '/trained_models/{}'.format(model_name), loss)
+    np.savetxt(ROOT_DIR + '/plots/Loss_history_{}'.format(model_name), loss)
     print('Final training loss: ',  loss[-1] )
     plt.figure()
     plt.loglog(loss,'-b',alpha=0.975);

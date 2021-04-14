@@ -4,7 +4,7 @@ alpha_2 = 0.01
 beta_2 = 0.
 delta = 1e-2
 lam = 0.95
-eps = 1/28.
+eps = 1/21.
 zeta = 1e-3
 eta = 5e-4
 
@@ -31,3 +31,7 @@ parameters_fixed = { 'alpha_2' : alpha_2,
                         'eps' : eps, 
                         'zeta' : zeta, 
                         'eta' : eta }
+                        
+model_name = 'Unsupervised_a_0={}_i_0={}_v_0={}_r_0={}_beta_1s={}_gammas={}_alpha_1s={}.pt'.format(a_0_set, i_0_set, v_0_set, r_0_set, beta_1s, gammas, alpha_1s)                        
+                        
+                        
