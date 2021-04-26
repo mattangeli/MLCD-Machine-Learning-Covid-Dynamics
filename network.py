@@ -37,12 +37,12 @@ class saivrNet(torch.nn.Module):
     def parametric_solution(self, t_tensor, t_0, initial_conditions, param_bundle):
         s_0, a_0, i_0, v_0, r_0 = initial_conditions[0][:], initial_conditions[1][:], initial_conditions[2][:], initial_conditions[3][:] ,initial_conditions[4][:] 
  
-        alpha_1, beta_1, gamma = param_bundle[0][:], param_bundle[1][:], param_bundle[2][:]
+        alpha_1, beta_1, gamma, delta = param_bundle[0][:], param_bundle[1][:], param_bundle[2][:], param_bundle[3][:]
 
         dt = t_tensor - t_0
         f = (1 - torch.exp(-dt)) 
         
-        t_bundle = torch.cat([t_tensor, a_0, i_0, v_0, r_0, alpha_1, beta_1, gamma], dim=1)
+        t_bundle = torch.cat([t_tensor, a_0, i_0, v_0, r_0, alpha_1, beta_1, gamma, delta], dim=1)
         
         N = self.forward(t_bundle)
         

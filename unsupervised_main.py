@@ -18,20 +18,19 @@ if __name__ == '__main__':
    t_final = 31.
    
    # Neural network and optimizer parameters
-   layers, hidden_units, activation = 5, 48, 'Sigmoid'  
-   train_size, epochs = 1024, 7500
-   num_batches, loss_threshold,  = 8, 1.e-6
-   hack_trivial = 1   #prevent the network from solving the model trivially
-   decay = 1e-4  # exponential regularization that favors the first points
-   input_dim, output_dim = 8, 5
-   adam_betas, lr = [0.9, 0.999], 5e-3   
+   train_size, epochs = 1024, 10000
+   num_batches, loss_threshold,  = 8, 1.e-10
+   hack_trivial = 0   #prevent the network from solving the model trivially
+   decay = 1.e-3 # exponential regularization that favors the first points
+   weight_i_loss = 0. #multiplies the loss due to the infected population (useful when I(t) is small)
+   adam_betas, lr = [0.9, 0.999], 2e-3   
    load_weights = True
 
    # Initialize the model and optimizer
    model = saivrNet(input_dim, layers, hidden_units, output_dim, activation)
    optimizer = torch.optim.Adam(model.parameters(), lr = lr, betas = adam_betas)
-   scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, factor=0.3, patience=550, 
-                                                         cooldown = 550, min_lr = 1e-6, 
+   scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, factor=0.3, patience=350, 
+                                                         cooldown = 350, min_lr = 1e-9, 
                                                           verbose=True)
    PATH = ROOT_DIR + '/trained_models/{}'.format(model_name)
 
@@ -40,6 +39,10 @@ if __name__ == '__main__':
        if load_weights:
           checkpoint = torch.load(PATH)
           model.load_state_dict(checkpoint['model_state_dict'])
+          optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+          for g in optimizer.param_groups:
+              g['lr'] = 1.e-3
+
           model.train();
           print('The model is trained starting with the weights found in ' + PATH)
        else:  
@@ -48,7 +51,7 @@ if __name__ == '__main__':
           print('File not found in ' + PATH + '\n' + 'The model is trained from scratch')
         
    # Train the model
-   model, loss_history, run_time = train_saivrNet(model, optimizer, scheduler, t_0, t_final, initial_conditions_set, parameters_bundle, parameters_fixed, epochs, train_size, num_batches, hack_trivial, decay, model_name, ROOT_DIR, loss_threshold)
+   model, loss_history, run_time = train_saivrNet(model, optimizer, scheduler, t_0, t_final, initial_conditions_set, parameters_bundle, parameters_fixed, epochs, train_size, num_batches, hack_trivial, decay, weight_i_loss, model_name, ROOT_DIR, loss_threshold)
                                  
    # Print the loss history and test the NN predictions
    printLoss(loss_history, run_time, model_name)   

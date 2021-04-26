@@ -3,9 +3,9 @@ import numpy as np
 from torch.autograd import grad
 from utils import SAIVR_derivs
 
-def sir_loss(t, s, a, i, v, r, param_bundle, param_fixed, decay= 0.):
+def sir_loss(t, s, a, i, v, r, param_bundle, param_fixed, decay= 0., weight_i_loss = 1.):
 
-    alpha_1, beta_1, gamma = param_bundle[0][:], param_bundle[1][:],  param_bundle[2][:]
+    alpha_1, beta_1, gamma, delta = param_bundle[0][:], param_bundle[1][:],  param_bundle[2][:],  param_bundle[3][:]
 
     s_prime = dfx(t, s)
     a_prime = dfx(t, a)
@@ -14,7 +14,7 @@ def sir_loss(t, s, a, i, v, r, param_bundle, param_fixed, decay= 0.):
     r_prime = dfx(t, r)
 
     u = [s, a, i, v, r]
-    ds, da, di, dv, dr = SAIVR_derivs(u, t, alpha_1, beta_1, gamma, param_fixed)
+    ds, da, di, dv, dr = SAIVR_derivs(u, t, alpha_1, beta_1, gamma, delta, param_fixed)
 
     loss_s = s_prime - ds
     loss_a = a_prime - da
@@ -25,13 +25,13 @@ def sir_loss(t, s, a, i, v, r, param_bundle, param_fixed, decay= 0.):
     # Regularize to give more importance to initial points
     loss_s = loss_s * torch.exp(-decay * t) 
     loss_a = loss_a * torch.exp(-decay * t) 
-    loss_i = loss_i * torch.exp(-decay * t) 
+    loss_i = loss_i * torch.exp(-decay * t)
     loss_v = loss_v * torch.exp(-decay * t) 
     loss_r = loss_r * torch.exp(-decay * t) 
     
     loss_s = (loss_s.pow(2)).mean() 
     loss_a = (loss_a.pow(2)).mean() 
-    loss_i = (loss_i.pow(2)).mean() 
+    loss_i = (loss_i.pow(2)).mean() * weight_i_loss #to learn better solutions when I(t) is small 
     loss_v = (loss_v.pow(2)).mean() 
     loss_r = (loss_r.pow(2)).mean() 
 
@@ -86,7 +86,7 @@ def data_fitting_loss(t, true_pop, s_hat, a_hat, i_hat, v_hat, r_hat, mode = 'ms
     return losses
 
 
-def trivial_loss(infected, asymptomatic, hack_trivial):
+def trivial_loss(infected, asymptomatic, vaccinated, hack_trivial):
     trivial_loss = 0.
 
     for i in infected:
@@ -94,7 +94,10 @@ def trivial_loss(infected, asymptomatic, hack_trivial):
     
     for i in asymptomatic:
         trivial_loss += i
-    
+
+    for i in vaccinated:
+        trivial_loss += i
+     
     trivial_loss = hack_trivial * torch.exp(- (trivial_loss/3.) ** 2)
     return trivial_loss
 

@@ -20,11 +20,9 @@ if __name__ == '__main__':
    n_timesteps = 100
 
    # Neural network and optimizer parameters
-   layers, hidden_units, activation = 5, 48, 'Sigmoid'
    epochs = 5000
    loss_threshold = 1.e-8
-   input_dim, output_dim = 8, 5
-   adam_betas, lr = [0.9, 0.999], 8e-4
+   adam_betas, lr = [0.9, 0.999], 2e-3
 
    # Initializing the neural network and optimizer 
    model = saivrNet(input_dim, layers, hidden_units, output_dim, activation)

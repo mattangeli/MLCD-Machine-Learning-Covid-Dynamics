@@ -9,12 +9,16 @@ from losses import *
 from torch.utils.data import DataLoader
 from random import shuffle
 
+
+
+
+
 # unsupervised training
 def train_saivrNet(model, optimizer, scheduler, t_0, t_final, initial_conditions_set, parameters_bundle, parameters_fixed, epochs,
-                   train_size, num_batches, hack_trivial, decay, 
+                   train_size, num_batches, hack_trivial, decay, weight_i_loss,
                    model_name, ROOT_DIR, loss_threshold = float('-inf')):
 
-    alpha_1s, beta_1s, gammas = parameters_bundle[0][:], parameters_bundle[1][:], parameters_bundle[2][:]
+    alpha_1s, beta_1s, gammas, deltas = parameters_bundle[0][:], parameters_bundle[1][:], parameters_bundle[2][:], parameters_bundle[3][:]
 
    # Train mode
     model.train()             
@@ -41,7 +45,8 @@ def train_saivrNet(model, optimizer, scheduler, t_0, t_final, initial_conditions
             alpha_1 = uniform(alpha_1s[0], alpha_1s[1], size=batch_size)
             beta_1 = uniform(beta_1s[0], beta_1s[1], size=batch_size)
             gamma = uniform(gammas[0], gammas[1], size=batch_size)
-
+            delta = uniform(deltas[0], deltas[1], size=batch_size)
+            
             a_0 = torch.Tensor([a_0]).reshape((-1, 1))
             i_0 = torch.Tensor([i_0]).reshape((-1, 1))
             v_0 = torch.Tensor([v_0]).reshape((-1, 1))
@@ -49,18 +54,19 @@ def train_saivrNet(model, optimizer, scheduler, t_0, t_final, initial_conditions
             alpha_1 = torch.Tensor([alpha_1]).reshape((-1, 1))
             beta_1 = torch.Tensor([beta_1]).reshape((-1, 1))
             gamma = torch.Tensor([gamma]).reshape((-1, 1))
+            delta = torch.Tensor([delta]).reshape((-1, 1))
             
             s_0 = 1 - (a_0 + i_0 + v_0 + r_0)
             initial_conditions = [s_0, a_0, i_0, v_0, r_0]
-            param_bundle = [alpha_1, beta_1, gamma]
+            param_bundle = [alpha_1, beta_1, gamma, delta]
 
             # Compute Network solution and loss
             s, a, i, v, r = model.parametric_solution(t, t_0, initial_conditions, param_bundle)
-            batch_loss = sir_loss(t, s, a, i, v, r, param_bundle, parameters_fixed, decay)
+            batch_loss = sir_loss(t, s, a, i, v, r, param_bundle, parameters_fixed, decay, weight_i_loss)
             
             # Hacking the system to prevent the ODEs to be solved trivially
             if hack_trivial:
-                batch_trivial_loss = trivial_loss(i, a, hack_trivial)
+                batch_trivial_loss = trivial_loss(i, a, v, hack_trivial)
                 batch_loss = batch_loss + batch_trivial_loss
 
             # Optimization
@@ -70,6 +76,7 @@ def train_saivrNet(model, optimizer, scheduler, t_0, t_final, initial_conditions
             optimizer.zero_grad()            
                
         # Keep the loss function history
+        train_epoch_loss = train_epoch_loss / batch_size
         Loss_history.append(train_epoch_loss)
         scheduler.step(train_epoch_loss)
         
@@ -88,7 +95,10 @@ def train_saivrNet(model, optimizer, scheduler, t_0, t_final, initial_conditions
         # print the loss and a plot of one of the solutions in the Checkpoint folder
         if epoch%250 == 0:
            print('Loss = ' + str(train_epoch_loss), 'lr = ' + str(optimizer.param_groups[0]['lr']))   
-           test_snippet(model, epoch, train_epoch_loss, t_0, t_final, a0 = a_0[0] , i0=i_0[0], v0=v_0[0], r0=r_0[0], alpha_1 = alpha_1[0], beta_1 = beta_1[0], gamma = gamma[0])
+           test_snippet(model, epoch, train_epoch_loss, t_0, t_final, parameters_fixed, a0 = a_0[0] , i0=i_0[0], v0=v_0[0], 
+                                                                           r0=r_0[0], alpha_1 = alpha_1[0], 
+                                                                           beta_1 = beta_1[0], gamma = gamma[0],
+                                                                           delta = delta[0])
         
         if epoch % 250 == 0 or epoch == epochs -1:
            torch.save({'model_state_dict': best_model.state_dict(),
@@ -108,7 +118,7 @@ def train_saivrNet(model, optimizer, scheduler, t_0, t_final, initial_conditions
 def fit_data_synthetic(model, time_series_dict, initial_conditions_set, parameters_bundle, param_fixed, lr, epochs,
             loss_threshold):
     
-    alpha_1s, beta_1s, gammas = parameters_bundle[0][:], parameters_bundle[1][:], parameters_bundle[2][:]
+    alpha_1s, beta_1s, gammas, deltas = parameters_bundle[0][:], parameters_bundle[1][:], parameters_bundle[2][:], parameters_bundle[3][:]
     
     # Train mode
     model.train()
@@ -128,7 +138,8 @@ def fit_data_synthetic(model, time_series_dict, initial_conditions_set, paramete
     alpha_1 = uniform(alpha_1s[0], alpha_1s[1], size=1)
     beta_1 = uniform(beta_1s[0], beta_1s[1], size=1)
     gamma = uniform(gammas[0], gammas[1], size=1)
-
+    delta = uniform(deltas[0], deltas[1], size=1)
+    
     a_0 = torch.Tensor([a_0]).reshape((-1, 1))
     i_0 = torch.Tensor([i_0]).reshape((-1, 1))
     v_0 = torch.Tensor([v_0]).reshape((-1, 1))
@@ -136,7 +147,8 @@ def fit_data_synthetic(model, time_series_dict, initial_conditions_set, paramete
     alpha_1 = torch.Tensor([alpha_1]).reshape((-1, 1))
     beta_1 = torch.Tensor([beta_1]).reshape((-1, 1))
     gamma = torch.Tensor([gamma]).reshape((-1, 1))
-    
+    delta = torch.Tensor([delta]).reshape((-1, 1))
+        
     a_0.requires_grad = True
     i_0.requires_grad = True
     v_0.requires_grad = True
@@ -144,15 +156,18 @@ def fit_data_synthetic(model, time_series_dict, initial_conditions_set, paramete
     beta_1.requires_grad = True
     alpha_1.requires_grad = True    
     gamma.requires_grad = True
+    delta.requires_grad = True
 
     s_0 = 1 - (a_0 + i_0 + v_0 + r_0)
     initial_conditions = [s_0, a_0, i_0, v_0, r_0]
-    param_bundle = [alpha_1, beta_1, gamma]
+    param_bundle = [alpha_1, beta_1, gamma, delta]
 
     print('\n Initial (random) parameters \n' 'S0 = {:.2f}, A0 = {:.2e}, I0 = {:.2e}, V0 = {:.2f}, R0 = {:.2f} \n'
-          'Alpha_1 = {:.2f}, Beta_1 = {:.2f}, Gamma = {:.2f} \n'.format(s_0.item(), a_0.item(), i_0.item(), v_0.item(), r_0.item(), alpha_1.item(), beta_1.item(), gamma.item()))
+          'Alpha_1 = {:.2f}, Beta_1 = {:.2f}, $\gamma$ = {:.2f}, $\delta$ = {:.2e} \n'.format(s_0.item(), a_0.item(), i_0.item(),
+                                                                                 v_0.item(), r_0.item(), alpha_1.item(),
+                                                                                 beta_1.item(), gamma.item(), delta.item()))
 
-    optimizer = torch.optim.Adam([a_0, i_0, v_0, r_0, alpha_1, beta_1, gamma], lr=lr)
+    optimizer = torch.optim.Adam([a_0, i_0, v_0, r_0, alpha_1, beta_1, gamma, delta], lr=lr)
     
     for epoch in tqdm(range(epochs), desc='Finding the best parameters/initial conditions'):  
         epoch_loss = 0.
@@ -169,8 +184,7 @@ def fit_data_synthetic(model, time_series_dict, initial_conditions_set, paramete
             
             losses = data_fitting_loss(t_tensor, true_pop, s_hat, a_hat, i_hat, v_hat, r_hat)
             batch_loss += sum(losses)
-              
-                
+                              
         batch_loss = batch_loss / len(time_sequence)
         epoch_loss += batch_loss
 
@@ -183,13 +197,13 @@ def fit_data_synthetic(model, time_series_dict, initial_conditions_set, paramete
         s_0 = 1 - (a_0 + i_0 + v_0 + r_0)
         initial_conditions = [s_0, a_0, i_0, v_0, r_0]
     
-        if epoch%100 == 0 and epoch != 0:
+        if epoch%250 == 0 and epoch != 0:
             print('Current Loss = {}'.format(epoch_loss.item()), 'lr = ' 
                                       + str(optimizer.param_groups[0]['lr']))
             print('Fitted parameters \n' 'S0 = {:.2f}, A0 = {:.2e}, I0 = {:.2e}, V0 = {:.2f}, R0 = {:.2f} \n'
-                                       'Alpha_1 ={:.2f}, Beta_1 = {:.2f}, Gamma = {:.2f} \n'
+                                       'Alpha_1 ={:.2f}, Beta_1 = {:.2f}, $\gamma$ = {:.2f}, $\delta$ = {:.2e} \n'
                                        .format(s_0.item(), a_0.item(), i_0.item(), v_0.item(),
-                                        r_0.item(), alpha_1.item(), beta_1.item(), gamma.item()))
+                                        r_0.item(), alpha_1.item(), beta_1.item(), gamma.item(), delta.item()))
           
         if epoch_loss < min_loss:
             min_loss = epoch_loss             
@@ -200,15 +214,9 @@ def fit_data_synthetic(model, time_series_dict, initial_conditions_set, paramete
            break
     
     optimized_params = [ s_0.item(), a_0.item(), i_0.item(), v_0.item(),
-                        r_0.item(), alpha_1.item(), beta_1.item(), gamma.item()]       
+                        r_0.item(), alpha_1.item(), beta_1.item(), gamma.item(), delta.item()]       
     return best_model, loss_history, optimized_params
     
-
-
-
-   
-
-
 
 
 
@@ -216,7 +224,7 @@ def fit_data_synthetic(model, time_series_dict, initial_conditions_set, paramete
 def fit_data_real(model, time_series_dict, initial_conditions_set, parameters_bundle, param_fixed, lr, epochs,
             loss_threshold):
     
-    alpha_1s, beta_1s, gammas = parameters_bundle[0][:], parameters_bundle[1][:], parameters_bundle[2][:]
+    alpha_1s, beta_1s, gammas, deltas = parameters_bundle[0][:], parameters_bundle[1][:], parameters_bundle[2][:], parameters_bundle[3][:]
 
     # handle the data 
     time_sequence = copy.deepcopy(list(time_series_dict.keys()))
@@ -230,13 +238,14 @@ def fit_data_real(model, time_series_dict, initial_conditions_set, parameters_bu
     
     # Initialize  the bundles
     a_0 = uniform(initial_conditions_set[0][0], initial_conditions_set[0][1], size=1)
-    i_0 =  time_series_dict[t_0][1]
-    v_0 =  time_series_dict[t_0][2]
-    r_0 = time_series_dict[t_0][3] 
+    i_0 = time_series_dict[t_0][1]
+    v_0 = time_series_dict[t_0][2]
+    r_0 = time_series_dict[t_0][3]
     alpha_1 = uniform(alpha_1s[0], alpha_1s[1], size=1)
     beta_1 = uniform(beta_1s[0], beta_1s[1], size=1)
     gamma = uniform(gammas[0], gammas[1], size=1)
-
+    delta = 0.#uniform(deltas[0], deltas[1], size=1)
+    
     a_0 = torch.Tensor([a_0]).reshape((-1, 1))
     i_0 = torch.Tensor([i_0]).reshape((-1, 1))
     v_0 = torch.Tensor([v_0]).reshape((-1, 1))
@@ -244,24 +253,31 @@ def fit_data_real(model, time_series_dict, initial_conditions_set, parameters_bu
     alpha_1 = torch.Tensor([alpha_1]).reshape((-1, 1))
     beta_1 = torch.Tensor([beta_1]).reshape((-1, 1))
     gamma = torch.Tensor([gamma]).reshape((-1, 1))
-    
-    a_0.requires_grad = False
-    i_0.requires_grad = False
+    delta = torch.Tensor([delta]).reshape((-1, 1))
+        
+    a_0.requires_grad = True
+    i_0.requires_grad = True
     r_0.requires_grad = True
     v_0.requires_grad = False
     beta_1.requires_grad = True
     alpha_1.requires_grad = True    
     gamma.requires_grad = True
+    delta.requires_grad = False
 
     s_0 = 1 - (a_0 + i_0 + v_0 + r_0)
     initial_conditions = [s_0, a_0, i_0, v_0, r_0]
-    param_bundle = [alpha_1, beta_1, gamma]
+    param_bundle = [alpha_1, beta_1, gamma, delta]
 
     print('\n Initial parameters \n' 'S0 = {:.2f}, A0 = {:.2e}, I0 = {:.2e}, V0 = {:.2e}, R0 = {:.2f} \n'
-          'Alpha_1 = {:.2f}, Beta_1 = {:.2f}, Gamma = {:.2f} \n'.format(s_0.item(), a_0.item(), i_0.item(),
-                                     v_0.item(), r_0.item(), alpha_1.item(), beta_1.item(), gamma.item()))
+          'Alpha_1 = {:.2f}, Beta_1 = {:.2f}, $\gamma$ = {:.2f}, $\delta$ = {:.2f} \n'.format(s_0.item(), a_0.item(), i_0.item(),
+                                     v_0.item(), r_0.item(), alpha_1.item(), beta_1.item(), gamma.item(), delta.item()))
 
-    optimizer = torch.optim.SGD([i_0, a_0, v_0, r_0, alpha_1, beta_1, gamma], lr=lr)
+    learning_rate_dicts = [ {'params' : [i_0, v_0], 'lr' : 1e-5},
+                            {'params' : [alpha_1, beta_1, gamma, r_0, a_0], 'lr' : 1e-1},
+                            {'params' : [delta], 'lr' : 1e-3} ]
+                            
+                            
+    optimizer = torch.optim.SGD(learning_rate_dicts, lr=lr)
     
     for epoch in tqdm(range(epochs), desc='Finding the best parameters/initial conditions'):  
         epoch_loss = 0.
@@ -287,7 +303,7 @@ def fit_data_real(model, time_series_dict, initial_conditions_set, parameters_bu
         batch_loss = batch_loss / len(time_sequence)
         epoch_loss += batch_loss
 
-        batch_loss.backward(retain_graph=True)
+        batch_loss.backward(retain_graph=False)
         optimizer.step()
         optimizer.zero_grad()
 
@@ -296,15 +312,15 @@ def fit_data_real(model, time_series_dict, initial_conditions_set, parameters_bu
         s_0 = 1 - (a_0 + i_0 + v_0 + r_0)
         initial_conditions = [s_0, a_0, i_0, v_0, r_0]
         
-        optimized_params = s_0.item(), a_0.item(), i_0.item(), v_0.item(), r_0.item(), alpha_1.item(), beta_1.item(), gamma.item()                                                        
+        optimized_params = s_0.item(), a_0.item(), i_0.item(), v_0.item(), r_0.item(), alpha_1.item(), beta_1.item(), gamma.item(), delta.item()                                                        
     
-        if epoch%100 == 0 and epoch != 0:
+        if epoch%250 == 0 and epoch != 0:
             print('Current Loss = {}'.format(epoch_loss.item()), 'lr = ' 
                                       + str(optimizer.param_groups[0]['lr']))
             print('Fitted parameters \n' 'S0 = {:.2f}, A0 = {:.2e}, I0 = {:.2e}, V0 = {:.2e}, R0 = {:.2f} \n'
-                                       'Alpha_1 ={:.2f}, Beta_1 = {:.2f}, Gamma = {:.2f} \n'
+                                       'Alpha_1 ={:.2f}, Beta_1 = {:.2f}, $\gamma$ = {:.2f}, $\delta$ = {:.2e} \n'
                                        .format(s_0.item(), a_0.item(), i_0.item(), v_0.item(),
-                                        r_0.item(), alpha_1.item(), beta_1.item(), gamma.item()))
+                                        r_0.item(), alpha_1.item(), beta_1.item(), gamma.item(), delta.item()))
             test_fitmodel_checkpoint(model, epoch, time_series_dict, 
                                                 optimized_params, param_fixed)  
                                                 

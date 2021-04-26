@@ -15,22 +15,20 @@ if __name__ == '__main__':
 
    data_type = 'real' 
    
-   country = 'Israel'
-   begin_date = '02/01/21' #month/day/year format
-   final_date = '02/28/21'
-   average = 'D' #'D' or 'W' time averages
-   time_series_dict = get_dataframe(country, begin_date, final_date, average, lam) 
+   country = 'Argentina'
+   begin_date = '11/15/20' #month/day/year format
+   final_date = '04/20/21'
+   recovered_mode = 'retarded' # 'retarded' if the recovered population is not present, 'Data' otherwise
+   time_series_dict = get_dataframe(country, begin_date, final_date, recovered_mode, moving_average = False) 
    
    t_0 = 0.
    t_final = len(time_series_dict)
    size = len(time_series_dict)
 
-   # Neural network and optimizer parameters
-   layers, hidden_units, activation = 5, 48, 'Sigmoid'
+   # Training parameters
    epochs = 5000
-   loss_threshold = 1.e-8
-   input_dim, output_dim = 8, 5
-   adam_betas, lr = [0.9, 0.999], 1e-3
+   loss_threshold = 1.e-10
+   lr = 1e-2
 
    # Neural network and optimizer parameters
    model = saivrNet(input_dim, layers, hidden_units, output_dim, activation)

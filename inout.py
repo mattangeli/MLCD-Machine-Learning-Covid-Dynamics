@@ -5,6 +5,9 @@ from matplotlib.colors import LogNorm
 import pandas as pd
 import wget
 import shutil
+import datetime as dt
+import sys
+from datetime import datetime
 
 ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
 
@@ -46,9 +49,16 @@ country_populations = {'Italy': 60460000,
                                   'Chile' : 18950000,
                                   'Hungary': 9773000,
                                   'United Arab Emirates' : 9771000,
-                                  'Uruguay': 3462000}
-
-def get_dataframe(country, begin_date, end_date, average, lam = 0.95, ROOT_DIR = ROOT_DIR): 
+                                  'Uruguay': 3462000,
+                                  'Turkey' : 82000000,
+                                  'Netherlands' : 17280000,
+                                  'Argentina' : 44940000}
+                                  
+def get_dataframe(country, begin_date, end_date, recovered_mode = None, moving_average = True,  lam = 0.95, ROOT_DIR = ROOT_DIR): 
+    
+    begin_date = datetime.strptime(begin_date, '%m/%d/%y')
+    end_date = datetime.strptime(end_date, '%m/%d/%y')
+    Npop = country_populations[country]
     
     try:
         countries_to_fit = pd.read_csv(ROOT_DIR + '/real_data/CSSE_data_countries.csv')
@@ -97,7 +107,6 @@ def get_dataframe(country, begin_date, end_date, average, lam = 0.95, ROOT_DIR =
         )
     
     owid_df = owid_df.rename(columns = {'location': 'Country/Region','date' : 'Date'})
-
    
     # Merging confirmed_long and deaths_long
     full_table = confirmed_long.merge(
@@ -112,19 +121,65 @@ def get_dataframe(country, begin_date, end_date, average, lam = 0.95, ROOT_DIR =
             on=['Province/State', 'Country/Region', 'Date', 'Lat', 'Long']
         )
     
-    full_table['Active'] = full_table['Confirmed'] - full_table['Deaths'] - full_table['Recovered']
-    full_grouped = full_table.groupby(['Date', 'Country/Region'])[[
-            'Confirmed', 'Deaths', 'Recovered', 'Active']].sum().reset_index()
+    full_table['Active'] = full_table['Confirmed'] - full_table['Deaths'] - full_table['Recovered'] 
+    full_grouped = full_table.groupby(['Date', 'Country/Region'])[['Confirmed', 'Deaths', 'Recovered', 'Active']].sum().reset_index()
     
-    full_grouped['Date']= pd.to_datetime(full_grouped['Date'], format = '%m/%d/%y')
+    full_grouped['Date']= pd.to_datetime(full_grouped['Date'], format = '%m/%d/%y')  
+    full_grouped = full_grouped.sort_values(by='Date',ascending=True)                                                                             
     full_grouped.to_csv(ROOT_DIR + '/real_data/CSSE_data_countries.csv')
+ 
     owid_df['Date'] = pd.to_datetime(owid_df['Date'])
-   
-    owid_country_df = owid_df[(owid_df['Country/Region'] == country) & (owid_df['Date'] >= begin_date)
-                                                                    & (owid_df['Date'] <= end_date)  ]
+    
+    # JHU dataframe, sometimes the 'removed' population is missing
+    if recovered_mode == 'retarded':
+       # if the recovered population is missing from the data, we use the confirmed population shifted back in time by 14 days instead
+       country_df = full_grouped[(full_grouped['Country/Region'] == country)]
+       country_df = country_df.reset_index(drop=True)     
+       country_df = country_df.sort_values(by='Date',ascending=True)  
+       country_df['Removed'] = country_df['Confirmed'].shift(-14)
+       country_df['Active'] = country_df['Removed'] - country_df['Confirmed']
+
+       if moving_average:
+           begin_date_moving = begin_date - dt.timedelta(days = 6)
+           country_df = country_df[(country_df['Date'] >= begin_date_moving) & (country_df['Date'] <=  end_date)] 
+           country_df.loc[: , 'Active'] = country_df.loc[: , 'Active'].rolling(window=7).mean() 
+           country_df = country_df.sort_values(by='Date',ascending=True)                                                                               
+           country_df = country_df.reset_index(drop=True)
+           country_df = country_df.loc[6:]
+       else:
+           country_df = country_df[(country_df['Date'] >= begin_date) & (country_df['Date'] <= end_date)]
+           country_df = country_df.sort_values(by='Date',ascending=True)                                                                               
+           country_df = country_df.reset_index(drop=True)     
+
+    else: 
+
+       if moving_average:
+          begin_date_moving = begin_date - dt.timedelta(days = 6)
+          country_df = full_grouped[(full_grouped['Country/Region'] == country) & (full_grouped['Date'] >= begin_date_moving) & (full_grouped['Date'] <=  end_date)] 
+          country_df.loc[:,'Active'] = country_df.loc[:,'Active'].rolling(window=7).mean() 
+          country_df = country_df.reset_index(drop=True)
+          country_df = country_df.loc[6:]
+       else:
+          country_df = full_grouped[(full_grouped['Country/Region'] == country) & (full_grouped['Date'] >= begin_date) & (full_grouped['Date'] <= end_date)]    
+          country_df = country_df.sort_values(by='Date',ascending=True)                                                                                    
+          country_df = country_df.reset_index(drop=True)                                                             
+
+    # owid dataframe to retrieve the vaccinated population
+    if moving_average:
+       begin_date_moving = begin_date - dt.timedelta(days = 6)
+       owid_country_df = owid_df[(owid_df['Country/Region'] == country) & (owid_df['Date'] >= begin_date_moving) & (owid_df['Date'] <= end_date)]
+       owid_country_df.loc[:,'people_vaccinated'] = owid_country_df.loc[:,'people_vaccinated'].rolling(window=7).mean() 
+       owid_country_df.loc[:,'people_fully_vaccinated'] = owid_country_df.loc[:,'people_fully_vaccinated'].rolling(window=7).mean()  
+       owid_country_df = owid_country_df.sort_values(by='Date',ascending=True)                                                                                    
+       owid_country_df = owid_country_df.reset_index(drop=True)
+       owid_country_df = owid_country_df.loc[6:]   
+          
+    else:    
+       owid_country_df = owid_df[(owid_df['Country/Region'] == country) & (owid_df['Date'] >= begin_date) & (owid_df['Date'] <= end_date)  ]   
+       owid_country_df = owid_country_df.reset_index(drop=True)     
+                                                                                                                                                                                        
     vaccinated_owid = owid_country_df.loc[:,['Date','people_vaccinated', 'people_fully_vaccinated']]
-    vaccinated_owid[['people_vaccinated','people_fully_vaccinated']] = vaccinated_owid[['people_vaccinated',
-                                                                        'people_fully_vaccinated']].fillna(0) 
+    vaccinated_owid[['people_vaccinated','people_fully_vaccinated']] = vaccinated_owid[['people_vaccinated', 'people_fully_vaccinated']].fillna(0) 
     vaccinated_owid = vaccinated_owid.reset_index(drop = True)                                                                                                                         
 
     # the 'vaccinated' population of the SAIVR model contains people who are vaccinated but still not immune                                   
@@ -133,27 +188,23 @@ def get_dataframe(country, begin_date, end_date, average, lam = 0.95, ROOT_DIR =
     vaccinated = [vaccinated_owid.loc[:, ['Date']], people_vaccinated]
     vaccinated = pd.concat(vaccinated, axis = 1)
     vaccinated = vaccinated.rename(columns = {0 : 'vaccinated'})
-                                            
-    country_df = full_grouped[(full_grouped['Country/Region'] == country) & (full_grouped['Date'] >= begin_date) 
-                                                                          & (full_grouped['Date'] <= end_date) ]
-    country_df.reset_index()
-    country_df_avg = country_df.resample(average, on='Date').mean()
-    vaccinated_avg = vaccinated.resample(average, on='Date').mean()
-    vaccinated_removed_avg = vaccinated_removed.resample(average, on='Date').mean()
-
-    infected = np.array(country_df_avg['Active'])
-    vaccinated = np.array(vaccinated_avg['vaccinated']) * lam # rescaled by the average vaccine efficiency
-    vaccinated_full = np.array(vaccinated_removed_avg['people_fully_vaccinated']) * lam 
-    removed = np.array(country_df_avg['Deaths']) + np.array(country_df_avg['Recovered']) + vaccinated_full                                                        
+                                                                                                              
+    infected = np.array(country_df['Active'])
+    vaccinated = np.array(vaccinated['vaccinated']) * lam # rescaled by the average vaccine efficiency
+    vaccinated_full = np.array(vaccinated_removed['people_fully_vaccinated']) * lam 
     
-    Npop = country_populations[country]
+    if recovered_mode == 'retarded':
+       removed = np.array(country_df['Removed']) + vaccinated_full + np.array(country_df['Recovered'])
+    else:
+       removed = np.array(country_df['Recovered']) + vaccinated_full + np.array(country_df['Deaths'])                                                                                                           
+
     time_series_dict = {}
     time_sequence = np.linspace(0., len(infected), len(infected))
     i_real = infected.reshape(-1,1)/Npop
     v_real = vaccinated.reshape(-1,1)/Npop
     v_full_real = vaccinated_full.reshape(-1,1)/Npop
     r_real = removed.reshape(-1,1)/Npop 
-    s_real = 1. - i_real - r_real  
+    s_real = 1. - r_real - v_full_real
     
     plt.plot(time_sequence, i_real,'-r', label='infective');
     plt.title('{} real data'.format(country))
@@ -162,7 +213,7 @@ def get_dataframe(country, begin_date, end_date, average, lam = 0.95, ROOT_DIR =
     plt.close()
     
     plt.plot(time_sequence, v_real,'-b', label='people_vaccinated');
-    plt.plot(time_sequence, v_full_real,'-b', label='people_fully_vaccinated');
+    plt.plot(time_sequence, v_full_real,'-k', label='people_fully_vaccinated');
     plt.title('{} real data'.format(country))
     plt.legend()
     plt.savefig('plots/Vaccinated_real_data_{}.png'.format(country))
@@ -178,6 +229,7 @@ def get_dataframe(country, begin_date, end_date, average, lam = 0.95, ROOT_DIR =
         time_series_dict[t] = [float(s_real[j]), float(i_real[j]), float(v_real[j]), float(r_real[j])]
 
     return time_series_dict
+    
     
 def printLoss(loss, runTime, model_name, ROOT_DIR = ROOT_DIR):
     np.savetxt(ROOT_DIR + '/plots/Loss_history_{}'.format(model_name), loss)
