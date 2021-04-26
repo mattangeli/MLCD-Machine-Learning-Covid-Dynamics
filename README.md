@@ -1,5 +1,5 @@
 # SAIVR-ML-modeling-COVID19
-A machine learning based engine to solve the Susceptible-Asymptomatic-Infected-Vaccinated-Removed model
+A machine learning based engine to solve the Susceptible-Asymptomatic-Infected-Vaccinated-Removed model of the Covid-19 pandemic.
 
 ## Quick compile guide
 
